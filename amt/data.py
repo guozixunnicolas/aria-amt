@@ -89,7 +89,7 @@ def get_wav_mid_segments(
             )
 
             # Hardcoded to 2.5s
-            if _check_onset_threshold(mid_feature, 2500) is False:
+            if _check_onset_threshold(mid_feature, 10500) is False:
                 print("No note messages after 2.5s - skipping")
                 continue
 
