@@ -5,6 +5,8 @@ import os
 import glob
 
 from csv import DictReader
+import sys
+sys.path.append(".")
 
 
 # TODO: Implement a way of inferring the tokenizer name automatically
@@ -20,6 +22,16 @@ def _add_maestro_args(subparser):
         default=1,
     )
 
+def _add_gaps_args(subparser):
+    subparser.add_argument("dir", help="GAPS directory path")
+    subparser.add_argument("-train", help="train save path", required=True)
+    subparser.add_argument("-test", help="test save path", required=True)
+    subparser.add_argument(
+        "-mp",
+        help="number of processes to use",
+        type=int,
+        default=1,
+    )
 
 def _add_synth_args(subparser):
     subparser.add_argument("dir", help="Directory containing MIDIs")
@@ -169,6 +181,39 @@ def get_matched_maestro_paths(maestro_dir):
 
     return matched_paths_train, matched_paths_val, matched_paths_test
 
+def get_matched_gaps_paths(gaps_dir):
+    print(f"check gaps_dir:{gaps_dir}", os.path.isdir(gaps_dir))
+    assert os.path.isdir(gaps_dir), "GAPS directory not found"
+
+    gaps_csv_path = os.path.join(gaps_dir, "gaps_split_data.csv")
+    assert os.path.isfile(gaps_csv_path), "GAPS csv not found"
+
+    matched_paths_train = []
+    # matched_paths_val = []
+    matched_paths_test = []
+    with open(gaps_csv_path, "r") as f:
+        dict_reader = DictReader(f)
+        for entry in dict_reader:
+            if entry['split']=="train" or entry['split']=="test":
+                audio_path = os.path.normpath(
+                    os.path.join(gaps_dir,"audio", entry["filename"])
+                )
+                midi_path = os.path.normpath(
+                    os.path.join(gaps_dir,'audio', entry['filename'].split(".")[0]+"-fine-aligned.mid")
+                )
+                if not os.path.isfile(audio_path) or not os.path.isfile(audio_path):
+                    print("File missing - skipping")
+                    print(audio_path)
+                    print(midi_path)
+                    continue
+                if entry['split']=="train":
+                    matched_paths_train.append((audio_path, midi_path))
+                elif entry['split']=="test":
+                    matched_paths_test.append((audio_path, midi_path))
+
+
+    return matched_paths_train, matched_paths_test
+
 
 def build_maestro(maestro_dir, train_file, val_file, test_file, num_procs):
     from amt.data import AmtDataset
@@ -211,6 +256,41 @@ def build_maestro(maestro_dir, train_file, val_file, test_file, num_procs):
         save_path=test_file,
         num_processes=num_procs,
     )
+
+def build_gaps(gaps_dir, train_file, test_file, num_procs):
+    from amt.data import AmtDataset
+    if os.path.isfile(train_file):
+        print(f"Dataset file already exists at {train_file} - removing")
+        os.remove(train_file)
+
+    if os.path.isfile(test_file):
+        print(f"Dataset file already exists at {test_file} - removing")
+        os.remove(test_file)
+
+    (
+        matched_paths_train,
+        matched_paths_test,
+    ) = get_matched_gaps_paths(gaps_dir)
+
+    print(
+        f"Found {len(matched_paths_train)}, {len(matched_paths_test)} train and test paths"
+    )
+
+    print(f"Building {train_file}")
+    AmtDataset.build(
+        load_paths=matched_paths_train,
+        save_path=train_file,
+        num_processes=num_procs,
+    )
+
+    print(f"Building {test_file}")
+    AmtDataset.build(
+        load_paths=matched_paths_test,
+        save_path=test_file,
+        num_processes=num_procs,
+    )
+
+
 
 
 def transcribe(
@@ -344,6 +424,9 @@ def main():
     subparser_maestro = subparsers.add_parser(
         "maestro", help="Commands to build the maestro dataset."
     )
+    subparser_gaps = subparsers.add_parser(
+        "gaps", help="Commands to build the gaps dataset."
+    )
     subparser_synth = subparsers.add_parser(
         "synth", help="Commands to build the maestro dataset."
     )
@@ -351,6 +434,7 @@ def main():
         "transcribe", help="Commands to run transcription."
     )
     _add_maestro_args(subparser_maestro)
+    _add_gaps_args(subparser_gaps)
     _add_synth_args(subparser_synth)
     _add_transcribe_args(subparser_transcribe)
 
@@ -365,6 +449,13 @@ def main():
             maestro_dir=args.dir,
             train_file=args.train,
             val_file=args.val,
+            test_file=args.test,
+            num_procs=args.mp,
+        )
+    elif args.command == "gaps":
+        build_gaps(
+            gaps_dir=args.dir,
+            train_file=args.train,
             test_file=args.test,
             num_procs=args.mp,
         )
