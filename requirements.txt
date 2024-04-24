@@ -1,5 +1,5 @@
 aria @ git+https://github.com/EleutherAI/aria.git
-torch >= 2.2
+torch == 2.0
 torchaudio
 accelerate 
 psutil
@@ -7,3 +7,5 @@ mido
 tqdm
 orjson
 mir_eval
+soundfile
+matplotlib
